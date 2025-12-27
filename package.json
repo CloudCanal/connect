@@ -1,5 +1,5 @@
 {
-    "name": "@cloud-canal/connect",
+    "name": "connect",
     "version": "4.0.0",
     "type": "module",
     "description": "A low-code framework for building web applications with state management and event-driven architecture.",
