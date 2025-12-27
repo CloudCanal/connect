@@ -1,0 +1,31 @@
+{
+    "name": "@cloud-canal/connect",
+    "version": "4.0.0",
+    "description": "A low-code framework for building web applications with state management and event-driven architecture.",
+    "main": "dist/cc.umd.js",
+    "module": "dist/cc.esm.js",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "rollup -c",
+        "dev": "rollup -c -w",
+        "test": "vitest",
+        "prepublishOnly": "npm run build"
+    },
+    "keywords": [
+        "state",
+        "events",
+        "web-components",
+        "framework"
+    ],
+    "license": "MIT",
+    "devDependencies": {
+        "@rollup/plugin-typescript": "^11.1.6",
+        "rollup": "^4.9.0",
+        "rollup-plugin-dts": "^6.1.0",
+        "typescript": "^5.3.0",
+        "vitest": "^1.0.0"
+    }
+}
