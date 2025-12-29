@@ -8,10 +8,10 @@ Include via CDN (jsDelivr):
 
 ```html
 <!-- Development -->
-<script src="https://cdn.jsdelivr.net/gh/CloudCanal/cloud-canal-connect@main/dist/connect.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/CloudCanal/connect@main/dist/connect.js"></script>
 
 <!-- Production (minified) -->
-<script src="https://cdn.jsdelivr.net/gh/CloudCanal/cloud-canal-connect@main/dist/connect.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/CloudCanal/connect@main/dist/connect.min.js"></script>
 ```
 
 The library automatically attaches to `window.cc` and auto-initializes with `window.location.origin` as the PocketBase URL.
@@ -22,7 +22,7 @@ The library automatically attaches to `window.cc` and auto-initializes with `win
 <!DOCTYPE html>
 <html>
     <head>
-        <script src="https://cdn.jsdelivr.net/gh/CloudCanal/cloud-canal-connect@main/dist/connect.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/gh/CloudCanal/connect@main/dist/connect.min.js"></script>
     </head>
     <body>
         <button id="login-btn">Login</button>
