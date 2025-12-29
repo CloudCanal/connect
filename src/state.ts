@@ -1,38 +1,80 @@
+import { events } from './events';
+
+// Types
 export interface StateOptions {
-  persistence?: 'window' | 'session' | 'local';
-  expiry?: number; // milliseconds from now
+  persist?: 'session' | 'local';
+  ttl?: number; // Time to live in milliseconds
 }
 
-interface StateStore {
+interface StoredValue {
   value: unknown;
   expiry?: number;
-  persistence: string;
 }
 
-type StateCallback = (value: unknown, oldValue: unknown) => void;
-
-const subscribers = new Map<string, Set<StateCallback>>();
-const memoryStore = new Map<string, StateStore>();
+// Constants
 const STORAGE_PREFIX = 'cc:';
 
-function getStorage(persistence: string): Storage | null {
-  switch (persistence) {
+// In-memory store for non-persisted values
+const memoryStore = new Map<string, StoredValue>();
+
+/**
+ * Get the appropriate storage backend
+ */
+function getStorage(persist?: 'session' | 'local'): Storage | null {
+  if (typeof window === 'undefined') return null;
+
+  switch (persist) {
     case 'session':
-      return typeof sessionStorage !== 'undefined' ? sessionStorage : null;
+      return sessionStorage;
     case 'local':
-      return typeof localStorage !== 'undefined' ? localStorage : null;
+      return localStorage;
     default:
-      return null; // window/memory
+      return null;
   }
 }
 
-function isExpired(store: StateStore): boolean {
-  return store.expiry !== undefined && Date.now() > store.expiry;
+/**
+ * Check if a stored value has expired
+ */
+function isExpired(stored: StoredValue): boolean {
+  return stored.expiry !== undefined && Date.now() > stored.expiry;
+}
+
+/**
+ * Get a value from storage
+ */
+function getFromStorage(key: string, storage: Storage): StoredValue | null {
+  try {
+    const raw = storage.getItem(`${STORAGE_PREFIX}${key}`);
+    if (!raw) return null;
+    return JSON.parse(raw) as StoredValue;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save a value to storage
+ */
+function saveToStorage(key: string, stored: StoredValue, storage: Storage): void {
+  try {
+    storage.setItem(`${STORAGE_PREFIX}${key}`, JSON.stringify(stored));
+  } catch (e) {
+    console.error(`Failed to save to storage: ${key}`, e);
+  }
+}
+
+/**
+ * Remove a value from storage
+ */
+function removeFromStorage(key: string, storage: Storage): void {
+  storage.removeItem(`${STORAGE_PREFIX}${key}`);
 }
 
 export const state = {
   /**
    * Get a value from state
+   * Checks memory first, then session storage, then local storage
    */
   get<T = unknown>(key: string): T | undefined {
     // Check memory first
@@ -45,24 +87,18 @@ export const state = {
       return mem.value as T;
     }
 
-    // Check persistent stores (session first, then local)
-    for (const storageType of ['session', 'local'] as const) {
-      const storage = getStorage(storageType);
+    // Check persistent stores
+    for (const persist of ['session', 'local'] as const) {
+      const storage = getStorage(persist);
       if (!storage) continue;
 
-      const raw = storage.getItem(`${STORAGE_PREFIX}${key}`);
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw) as StateStore;
-          if (isExpired(parsed)) {
-            storage.removeItem(`${STORAGE_PREFIX}${key}`);
-            continue;
-          }
-          return parsed.value as T;
-        } catch {
-          // Invalid JSON, remove it
-          storage.removeItem(`${STORAGE_PREFIX}${key}`);
+      const stored = getFromStorage(key, storage);
+      if (stored) {
+        if (isExpired(stored)) {
+          removeFromStorage(key, storage);
+          continue;
         }
+        return stored.value as T;
       }
     }
 
@@ -71,35 +107,28 @@ export const state = {
 
   /**
    * Set a value in state
+   * Emits 'state:{key}' event with { value, oldValue }
    */
   set(key: string, value: unknown, options: StateOptions = {}): void {
-    const { persistence = 'window', expiry } = options;
+    const { persist, ttl } = options;
     const oldValue = this.get(key);
 
-    const store: StateStore = {
+    const stored: StoredValue = {
       value,
-      persistence,
-      expiry: expiry ? Date.now() + expiry : undefined
+      expiry: ttl ? Date.now() + ttl : undefined
     };
 
-    const storage = getStorage(persistence);
+    const storage = getStorage(persist);
     if (storage) {
-      storage.setItem(`${STORAGE_PREFIX}${key}`, JSON.stringify(store));
+      saveToStorage(key, stored, storage);
+      // Also remove from memory if it was there
+      memoryStore.delete(key);
     } else {
-      memoryStore.set(key, store);
+      memoryStore.set(key, stored);
     }
 
-    // Notify subscribers
-    const subs = subscribers.get(key);
-    if (subs) {
-      subs.forEach(cb => {
-        try {
-          cb(value, oldValue);
-        } catch (e) {
-          console.error(`Error in state subscriber for "${key}":`, e);
-        }
-      });
-    }
+    // Emit state change event
+    events.emit(`state:${key}`, { value, oldValue });
   },
 
   /**
@@ -111,59 +140,38 @@ export const state = {
 
   /**
    * Delete a key from state
+   * Emits 'state:{key}' event with { value: undefined, oldValue }
    */
   delete(key: string): void {
     const oldValue = this.get(key);
+    if (oldValue === undefined) return;
 
-    // Remove from all stores
+    // Remove from memory
     memoryStore.delete(key);
 
-    const session = getStorage('session');
-    const local = getStorage('local');
-
-    session?.removeItem(`${STORAGE_PREFIX}${key}`);
-    local?.removeItem(`${STORAGE_PREFIX}${key}`);
-
-    // Notify subscribers of deletion
-    const subs = subscribers.get(key);
-    if (subs && oldValue !== undefined) {
-      subs.forEach(cb => {
-        try {
-          cb(undefined, oldValue);
-        } catch (e) {
-          console.error(`Error in state subscriber for "${key}":`, e);
-        }
-      });
+    // Remove from all persistent stores
+    for (const persist of ['session', 'local'] as const) {
+      const storage = getStorage(persist);
+      if (storage) {
+        removeFromStorage(key, storage);
+      }
     }
+
+    // Emit state change event
+    events.emit(`state:${key}`, { value: undefined, oldValue });
   },
 
   /**
-   * Subscribe to changes on a key
-   */
-  subscribe(key: string, callback: StateCallback): void {
-    if (!subscribers.has(key)) {
-      subscribers.set(key, new Set());
-    }
-    subscribers.get(key)!.add(callback);
-  },
-
-  /**
-   * Unsubscribe from changes on a key
-   */
-  unsubscribe(key: string, callback: StateCallback): void {
-    subscribers.get(key)?.delete(callback);
-  },
-
-  /**
-   * Clear all state (useful for testing or logout)
+   * Clear all state
+   * Does NOT emit events for each key
    */
   clear(): void {
     // Clear memory
     memoryStore.clear();
 
     // Clear persistent storage with our prefix
-    for (const storageType of ['session', 'local'] as const) {
-      const storage = getStorage(storageType);
+    for (const persist of ['session', 'local'] as const) {
+      const storage = getStorage(persist);
       if (!storage) continue;
 
       const keysToRemove: string[] = [];
@@ -175,8 +183,5 @@ export const state = {
       }
       keysToRemove.forEach(k => storage.removeItem(k));
     }
-
-    // Clear subscribers
-    subscribers.clear();
   }
 };

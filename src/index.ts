@@ -1,20 +1,17 @@
 import { state, StateOptions } from './state';
-import { events, EventHandler } from './events';
-import { meta, MetaStore } from './meta';
-import { actions, ApiOptions, ApiResponse } from './actions';
+import { events, EventCallback, DOMEventCallback } from './events';
+import { db, DbUser, ListOptions, ListResult } from './db';
 
 export interface CC {
   state: typeof state;
   events: typeof events;
-  meta: typeof meta;
-  actions: typeof actions;
+  db: typeof db;
 }
 
 export const cc: CC = {
   state,
   events,
-  meta,
-  actions
+  db
 };
 
 // Auto-attach to window in browser environments
@@ -23,8 +20,8 @@ if (typeof window !== 'undefined') {
 }
 
 // Named exports for ESM usage
-export { state, events, meta, actions };
-export type { StateOptions, EventHandler, MetaStore, ApiOptions, ApiResponse };
+export { state, events, db };
+export type { StateOptions, EventCallback, DOMEventCallback, DbUser, ListOptions, ListResult };
 
 // Default export
 export default cc;
