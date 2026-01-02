@@ -1,0 +1,19 @@
+{
+    "action": "emit001action0000",
+    "collectionField": "",
+    "collectionId": "pbc_1050919262",
+    "collectionName": "actionInputs",
+    "conditions": null,
+    "created": "2026-01-02 12:00:00.000Z",
+    "default": "",
+    "id": "emit001input0002",
+    "name": "payload",
+    "options": null,
+    "order": 1,
+    "pattern": "",
+    "placeholder": "{ itemCount: 5 }",
+    "required": false,
+    "slot": "",
+    "type": "literal",
+    "updated": "2026-01-02 12:00:00.000Z"
+}

@@ -1,0 +1,15 @@
+{
+    "active": true,
+    "category": "State",
+    "collectionId": "pbc_2484833797",
+    "collectionName": "actions",
+    "created": "2026-01-01 21:45:34.607Z",
+    "icon": "✏️",
+    "id": "tvp3qa11ucj9m87",
+    "identifier": "setState",
+    "implementation": "cc.state.set(\r\n  ${inputs.key},\r\n  ${inputs.value}${\r\n    inputs.persist || inputs.ttl > 0\r\n      ? `, {${[\r\n          inputs.persist ? ` persist: \"${inputs.persist}\"` : '',\r\n          inputs.ttl > 0 ? ` ttl: ${inputs.ttl}` : ''\r\n        ].filter(Boolean).join(', ')} }`\r\n      : ''\r\n  }\r\n);",
+    "name": "Set State",
+    "resultVariable": null,
+    "target": "frontend",
+    "updated": "2026-01-01 22:02:56.136Z"
+}

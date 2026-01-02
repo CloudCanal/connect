@@ -1,0 +1,19 @@
+{
+    "action": "emit001action0000",
+    "collectionField": "",
+    "collectionId": "pbc_1050919262",
+    "collectionName": "actionInputs",
+    "conditions": null,
+    "created": "2026-01-02 12:00:00.000Z",
+    "default": "",
+    "id": "emit001input0001",
+    "name": "event",
+    "options": null,
+    "order": 0,
+    "pattern": "",
+    "placeholder": "cart:updated",
+    "required": true,
+    "slot": "",
+    "type": "text",
+    "updated": "2026-01-02 12:00:00.000Z"
+}

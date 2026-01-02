@@ -32,6 +32,7 @@ let pb: PocketBase | null = null;
 let dbUrl: string = typeof window !== 'undefined' ? window.location.origin : '';
 let dbAutoCancellation: boolean = false;
 const realtimeUnsubscribers = new Map<string, () => void>();
+const realtimeRecordUnsubscribers = new Map<string, () => void>(); // Key: "collection:id"
 
 /**
  * Get or create the PocketBase instance
@@ -69,8 +70,8 @@ function saveAuthState(): void {
     state.set('_auth:token', pb.authStore.token, { persist: 'local' });
     state.set('_auth:user', user, { persist: 'local' });
   } else {
-    state.delete('_auth:token');
-    state.delete('_auth:user');
+    state.remove('_auth:token');
+    state.remove('_auth:user');
   }
 }
 
@@ -113,8 +114,35 @@ async function disableRealtime(collection: string): Promise<void> {
   }
 }
 
+/**
+ * Enable realtime for a specific record (called by events module)
+ */
+async function enableRealtimeRecord(collection: string, id: string): Promise<void> {
+  const key = `${collection}:${id}`;
+  if (realtimeRecordUnsubscribers.has(key)) return;
+
+  const client = getClient();
+  const unsubscribe = await client.collection(collection).subscribe(id, (e: RecordSubscription<RecordModel>) => {
+    events.emit(`db:${collection}:${e.action}:${id}`, { record: e.record });
+  });
+
+  realtimeRecordUnsubscribers.set(key, unsubscribe);
+}
+
+/**
+ * Disable realtime for a specific record (called by events module)
+ */
+async function disableRealtimeRecord(collection: string, id: string): Promise<void> {
+  const key = `${collection}:${id}`;
+  const unsubscribe = realtimeRecordUnsubscribers.get(key);
+  if (unsubscribe) {
+    unsubscribe();
+    realtimeRecordUnsubscribers.delete(key);
+  }
+}
+
 // Register with events module
-setDbModule({ enableRealtime, disableRealtime });
+setDbModule({ enableRealtime, disableRealtime, enableRealtimeRecord, disableRealtimeRecord });
 
 export const db = {
   /**
@@ -214,8 +242,8 @@ export const db = {
     const user = this.getUser();
     const client = getClient();
     client.authStore.clear();
-    state.delete('_auth:token');
-    state.delete('_auth:user');
+    state.remove('_auth:token');
+    state.remove('_auth:user');
     events.emit('auth:logout', { user });
   },
 

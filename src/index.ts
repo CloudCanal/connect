@@ -1,5 +1,5 @@
 import { state, StateOptions } from './state';
-import { events, EventCallback, DOMEventCallback } from './events';
+import { events, EventCallback } from './events';
 import { db, DbUser, ListOptions, ListResult } from './db';
 
 export interface CC {
@@ -21,7 +21,7 @@ if (typeof window !== 'undefined') {
 
 // Named exports for ESM usage
 export { state, events, db };
-export type { StateOptions, EventCallback, DOMEventCallback, DbUser, ListOptions, ListResult };
+export type { StateOptions, EventCallback, DbUser, ListOptions, ListResult };
 
 // Default export
 export default cc;

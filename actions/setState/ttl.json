@@ -1,0 +1,19 @@
+{
+    "action": "tvp3qa11ucj9m87",
+    "collectionField": "",
+    "collectionId": "pbc_1050919262",
+    "collectionName": "actionInputs",
+    "conditions": null,
+    "created": "2026-01-01 21:53:29.696Z",
+    "default": "",
+    "id": "egyukiwq0t24tvl",
+    "name": "ttl",
+    "options": null,
+    "order": 3,
+    "pattern": "",
+    "placeholder": "3600000",
+    "required": false,
+    "slot": "",
+    "type": "number",
+    "updated": "2026-01-01 21:53:29.696Z"
+}

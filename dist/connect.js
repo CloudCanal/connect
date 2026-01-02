@@ -9,8 +9,8 @@
     const customHandlers = new Map();
     // Track realtime subscriptions (collection -> listener count)
     const realtimeCollections = new Map();
-    // DOM event delegation handler (attached to document)
-    const domDelegationHandlers = new Map();
+    // Track record-specific subscriptions (collection:id -> listener count)
+    const realtimeRecords = new Map();
     // Reference to db module (set via setDbModule to avoid circular imports)
     let dbModule = null;
     /**
@@ -20,59 +20,37 @@
         dbModule = db;
     }
     /**
-     * Parse a db event name to extract collection and action
+     * Parse a db event name to extract collection, action, and optional record ID
      * Returns null if not a db event
+     * Format: db:{collection}:{action} or db:{collection}:{action}:{id}
      */
     function parseDbEvent(eventName) {
-        const match = eventName.match(/^db:([^:]+):(create|update|delete)$/);
+        const match = eventName.match(/^db:([^:]+):(create|update|delete)(?::(.+))?$/);
         if (match) {
-            return { collection: match[1], action: match[2] };
+            return {
+                collection: match[1],
+                action: match[2],
+                id: match[3] // undefined if not present
+            };
         }
         return null;
     }
     /**
-     * Setup DOM event delegation for an event type
-     */
-    function ensureDomDelegation(eventType) {
-        if (domDelegationHandlers.has(eventType))
-            return;
-        const handler = (e) => {
-            // Find all listeners for this event type
-            for (const entry of listeners) {
-                if (entry.type !== 'dom' || entry.event !== eventType)
-                    continue;
-                // Check if target matches selector
-                if (entry.selector === document) {
-                    entry.callback(e);
-                }
-                else if (typeof entry.selector === 'string') {
-                    const target = e.target;
-                    if (target?.matches?.(entry.selector) || target?.closest?.(entry.selector)) {
-                        entry.callback(e);
-                    }
-                }
-            }
-        };
-        document.addEventListener(eventType, handler, true);
-        domDelegationHandlers.set(eventType, handler);
-    }
-    /**
-     * Remove DOM delegation if no more listeners for an event type
-     */
-    function cleanupDomDelegation(eventType) {
-        const hasListeners = listeners.some(l => l.type === 'dom' && l.event === eventType);
-        if (!hasListeners) {
-            const handler = domDelegationHandlers.get(eventType);
-            if (handler) {
-                document.removeEventListener(eventType, handler, true);
-                domDelegationHandlers.delete(eventType);
-            }
-        }
-    }
-    /**
      * Handle realtime subscription when db:* listener added
      */
-    async function handleRealtimeAdd(collection) {
+    async function handleRealtimeAdd(collection, id) {
+        // Record-specific subscription (only for update/delete, not create)
+        if (id) {
+            const key = `${collection}:${id}`;
+            const count = (realtimeRecords.get(key) || 0) + 1;
+            realtimeRecords.set(key, count);
+            // First listener for this record - enable realtime
+            if (count === 1 && dbModule) {
+                await dbModule.enableRealtimeRecord(collection, id);
+            }
+            return;
+        }
+        // Collection-wide subscription
         const count = (realtimeCollections.get(collection) || 0) + 1;
         realtimeCollections.set(collection, count);
         // First listener for this collection - enable realtime
@@ -83,7 +61,24 @@
     /**
      * Handle realtime unsubscription when db:* listener removed
      */
-    async function handleRealtimeRemove(collection) {
+    async function handleRealtimeRemove(collection, id) {
+        // Record-specific subscription
+        if (id) {
+            const key = `${collection}:${id}`;
+            const count = (realtimeRecords.get(key) || 1) - 1;
+            if (count <= 0) {
+                realtimeRecords.delete(key);
+                // Last listener removed - disable realtime for this record
+                if (dbModule) {
+                    await dbModule.disableRealtimeRecord(collection, id);
+                }
+            }
+            else {
+                realtimeRecords.set(key, count);
+            }
+            return;
+        }
+        // Collection-wide subscription
         const count = (realtimeCollections.get(collection) || 1) - 1;
         if (count <= 0) {
             realtimeCollections.delete(collection);
@@ -99,52 +94,28 @@
     const events = {
         /**
          * Subscribe to an event
-         * @param event - Event name (custom) or DOM event type
-         * @param selectorOrCallback - CSS selector for DOM events, or callback for custom events
-         * @param callback - Callback for DOM events
          */
-        on(event, selectorOrCallback, callback) {
-            // DOM event: on('click', '#btn', callback) or on('keydown', document, callback)
-            if (callback !== undefined) {
-                const selector = selectorOrCallback;
-                const entry = { type: 'dom', event, callback, selector };
-                listeners.push(entry);
-                ensureDomDelegation(event);
-                return;
-            }
-            // Custom event: on('auth:login', callback)
-            const cb = selectorOrCallback;
-            const entry = { type: 'custom', event, callback: cb };
+        on(event, callback) {
+            const entry = { event, callback };
             listeners.push(entry);
             if (!customHandlers.has(event)) {
                 customHandlers.set(event, new Set());
             }
-            customHandlers.get(event).add(cb);
+            customHandlers.get(event).add(callback);
             // Check for db:* events to enable realtime
             const dbEvent = parseDbEvent(event);
             if (dbEvent) {
-                handleRealtimeAdd(dbEvent.collection);
+                // Only allow record ID for update/delete (can't subscribe to non-existent record for create)
+                const id = dbEvent.action !== 'create' ? dbEvent.id : undefined;
+                handleRealtimeAdd(dbEvent.collection, id);
             }
         },
         /**
          * Unsubscribe from an event
          */
-        off(event, selectorOrCallback, callback) {
-            // DOM event
-            if (callback !== undefined) {
-                const selector = selectorOrCallback;
-                const index = listeners.findIndex(l => l.type === 'dom' && l.event === event && l.selector === selector &&
-                    (l.callback === callback || l.originalCallback === callback));
-                if (index !== -1) {
-                    listeners.splice(index, 1);
-                    cleanupDomDelegation(event);
-                }
-                return;
-            }
-            // Custom event
-            const cb = selectorOrCallback;
-            const index = listeners.findIndex(l => l.type === 'custom' && l.event === event &&
-                (l.callback === cb || l.originalCallback === cb));
+        off(event, callback) {
+            const index = listeners.findIndex(l => l.event === event &&
+                (l.callback === callback || l.originalCallback === callback));
             if (index !== -1) {
                 const entry = listeners[index];
                 listeners.splice(index, 1);
@@ -155,53 +126,33 @@
                 // Check for db:* events to disable realtime
                 const dbEvent = parseDbEvent(event);
                 if (dbEvent) {
-                    handleRealtimeRemove(dbEvent.collection);
+                    const id = dbEvent.action !== 'create' ? dbEvent.id : undefined;
+                    handleRealtimeRemove(dbEvent.collection, id);
                 }
             }
         },
         /**
          * Subscribe to an event once (auto-unsubscribes after first call)
          */
-        once(event, selectorOrCallback, callback) {
-            if (callback !== undefined) {
-                // DOM event
-                const selector = selectorOrCallback;
-                const wrapper = (e) => {
-                    this.off(event, selector, wrapper);
-                    callback(e);
-                };
-                const entry = {
-                    type: 'dom',
-                    event,
-                    callback: wrapper,
-                    selector,
-                    originalCallback: callback
-                };
-                listeners.push(entry);
-                ensureDomDelegation(event);
+        once(event, callback) {
+            const wrapper = (payload) => {
+                this.off(event, wrapper);
+                callback(payload);
+            };
+            const entry = {
+                event,
+                callback: wrapper,
+                originalCallback: callback
+            };
+            listeners.push(entry);
+            if (!customHandlers.has(event)) {
+                customHandlers.set(event, new Set());
             }
-            else {
-                // Custom event
-                const cb = selectorOrCallback;
-                const wrapper = (payload) => {
-                    this.off(event, wrapper);
-                    cb(payload);
-                };
-                const entry = {
-                    type: 'custom',
-                    event,
-                    callback: wrapper,
-                    originalCallback: cb
-                };
-                listeners.push(entry);
-                if (!customHandlers.has(event)) {
-                    customHandlers.set(event, new Set());
-                }
-                customHandlers.get(event).add(wrapper);
-                const dbEvent = parseDbEvent(event);
-                if (dbEvent) {
-                    handleRealtimeAdd(dbEvent.collection);
-                }
+            customHandlers.get(event).add(wrapper);
+            const dbEvent = parseDbEvent(event);
+            if (dbEvent) {
+                const id = dbEvent.action !== 'create' ? dbEvent.id : undefined;
+                handleRealtimeAdd(dbEvent.collection, id);
             }
         },
         /**
@@ -233,29 +184,37 @@
                         listeners.splice(index, 1);
                 });
                 customHandlers.delete(event);
-                if (toRemove.some(l => l.type === 'dom')) {
-                    cleanupDomDelegation(event);
-                }
                 const dbEvent = parseDbEvent(event);
-                if (dbEvent && realtimeCollections.has(dbEvent.collection)) {
-                    realtimeCollections.delete(dbEvent.collection);
-                    dbModule?.disableRealtime(dbEvent.collection);
+                if (dbEvent) {
+                    const id = dbEvent.action !== 'create' ? dbEvent.id : undefined;
+                    if (id) {
+                        const key = `${dbEvent.collection}:${id}`;
+                        if (realtimeRecords.has(key)) {
+                            realtimeRecords.delete(key);
+                            dbModule?.disableRealtimeRecord(dbEvent.collection, id);
+                        }
+                    }
+                    else if (realtimeCollections.has(dbEvent.collection)) {
+                        realtimeCollections.delete(dbEvent.collection);
+                        dbModule?.disableRealtime(dbEvent.collection);
+                    }
                 }
             }
             else {
                 // Clear all
                 listeners.length = 0;
                 customHandlers.clear();
-                // Cleanup all DOM delegations
-                domDelegationHandlers.forEach((handler, eventType) => {
-                    document.removeEventListener(eventType, handler, true);
-                });
-                domDelegationHandlers.clear();
-                // Disable all realtime
+                // Disable all collection-wide realtime
                 realtimeCollections.forEach((_, collection) => {
                     dbModule?.disableRealtime(collection);
                 });
                 realtimeCollections.clear();
+                // Disable all record-specific realtime
+                realtimeRecords.forEach((_, key) => {
+                    const [collection, id] = key.split(':');
+                    dbModule?.disableRealtimeRecord(collection, id);
+                });
+                realtimeRecords.clear();
             }
         },
         /**
@@ -263,9 +222,7 @@
          */
         list() {
             return listeners.map(l => ({
-                type: l.type,
-                event: l.event,
-                selector: l.selector === document ? 'document' : l.selector
+                event: l.event
             }));
         }
     };
@@ -336,7 +293,7 @@
             const mem = memoryStore.get(key);
             if (mem) {
                 if (isExpired(mem)) {
-                    this.delete(key);
+                    this.remove(key);
                     return undefined;
                 }
                 return mem.value;
@@ -387,10 +344,10 @@
             return this.get(key) !== undefined;
         },
         /**
-         * Delete a key from state
+         * Remove a key from state
          * Emits 'state:{key}' event with { value: undefined, oldValue }
          */
-        delete(key) {
+        remove(key) {
             const oldValue = this.get(key);
             if (oldValue === undefined)
                 return;
@@ -405,6 +362,36 @@
             }
             // Emit state change event
             events.emit(`state:${key}`, { value: undefined, oldValue });
+        },
+        /**
+         * List all state keys and their storage locations
+         * Useful for debugging
+         */
+        list() {
+            const result = [];
+            // List memory keys
+            for (const [key, stored] of memoryStore) {
+                if (!isExpired(stored)) {
+                    result.push({ key, storage: 'memory' });
+                }
+            }
+            // List persistent storage keys
+            for (const persist of ['session', 'local']) {
+                const storage = getStorage(persist);
+                if (!storage)
+                    continue;
+                for (let i = 0; i < storage.length; i++) {
+                    const rawKey = storage.key(i);
+                    if (rawKey?.startsWith(STORAGE_PREFIX)) {
+                        const key = rawKey.slice(STORAGE_PREFIX.length);
+                        const stored = getFromStorage(key, storage);
+                        if (stored && !isExpired(stored)) {
+                            result.push({ key, storage: persist });
+                        }
+                    }
+                }
+            }
+            return result;
         },
         /**
          * Clear all state
@@ -437,6 +424,7 @@
     let dbUrl = typeof window !== 'undefined' ? window.location.origin : '';
     let dbAutoCancellation = false;
     const realtimeUnsubscribers = new Map();
+    const realtimeRecordUnsubscribers = new Map(); // Key: "collection:id"
     /**
      * Get or create the PocketBase instance
      */
@@ -470,8 +458,8 @@
             state.set('_auth:user', user, { persist: 'local' });
         }
         else {
-            state.delete('_auth:token');
-            state.delete('_auth:user');
+            state.remove('_auth:token');
+            state.remove('_auth:user');
         }
     }
     /**
@@ -508,8 +496,32 @@
             realtimeUnsubscribers.delete(collection);
         }
     }
+    /**
+     * Enable realtime for a specific record (called by events module)
+     */
+    async function enableRealtimeRecord(collection, id) {
+        const key = `${collection}:${id}`;
+        if (realtimeRecordUnsubscribers.has(key))
+            return;
+        const client = getClient();
+        const unsubscribe = await client.collection(collection).subscribe(id, (e) => {
+            events.emit(`db:${collection}:${e.action}:${id}`, { record: e.record });
+        });
+        realtimeRecordUnsubscribers.set(key, unsubscribe);
+    }
+    /**
+     * Disable realtime for a specific record (called by events module)
+     */
+    async function disableRealtimeRecord(collection, id) {
+        const key = `${collection}:${id}`;
+        const unsubscribe = realtimeRecordUnsubscribers.get(key);
+        if (unsubscribe) {
+            unsubscribe();
+            realtimeRecordUnsubscribers.delete(key);
+        }
+    }
     // Register with events module
-    setDbModule({ enableRealtime, disableRealtime });
+    setDbModule({ enableRealtime, disableRealtime, enableRealtimeRecord, disableRealtimeRecord });
     const db = {
         /**
          * Get or set the PocketBase URL
@@ -597,8 +609,8 @@
             const user = this.getUser();
             const client = getClient();
             client.authStore.clear();
-            state.delete('_auth:token');
-            state.delete('_auth:user');
+            state.remove('_auth:token');
+            state.remove('_auth:user');
             events.emit('auth:logout', { user });
         },
         /**

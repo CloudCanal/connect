@@ -1,0 +1,33 @@
+{
+    "category": "Custom",
+    "collectionId": "pbc_3421342936",
+    "collectionName": "hooks",
+    "context": null,
+    "created": "2026-01-02 12:00:00.000Z",
+    "excludeActions": [],
+    "id": "custom01event0000",
+    "implementation": "const handler = async (payload) => {\\n\\t${SLOT_actions}\\n};\\ncc.events.on(${inputs.event}, handler);\\nthis._eventCleanups.push(() => cc.events.off(${inputs.event}, handler));",
+    "inputs": [
+        {
+            "name": "event",
+            "type": "text",
+            "required": true,
+            "placeholder": "cart:updated"
+        }
+    ],
+    "name": "Custom Event",
+    "outputs": [
+        {
+            "type": "static",
+            "typeName": "payload",
+            "schema": [
+                {
+                    "name": "payload",
+                    "type": "object"
+                }
+            ]
+        }
+    ],
+    "target": "frontend",
+    "updated": "2026-01-02 12:00:00.000Z"
+}

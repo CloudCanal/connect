@@ -1,0 +1,32 @@
+{
+    "action": "tvp3qa11ucj9m87",
+    "collectionField": "",
+    "collectionId": "pbc_1050919262",
+    "collectionName": "actionInputs",
+    "conditions": null,
+    "created": "2026-01-01 21:52:49.230Z",
+    "default": "",
+    "id": "o9b1o627kf2i3vu",
+    "name": "persist",
+    "options": [
+        {
+            "label": "Window",
+            "value": ""
+        },
+        {
+            "label": "Session",
+            "value": "session"
+        },
+        {
+            "label": "Local",
+            "value": "local"
+        }
+    ],
+    "order": 2,
+    "pattern": "",
+    "placeholder": "",
+    "required": false,
+    "slot": "",
+    "type": "select",
+    "updated": "2026-01-01 21:55:13.013Z"
+}

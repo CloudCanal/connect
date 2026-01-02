@@ -1,0 +1,19 @@
+{
+    "action": "tvp3qa11ucj9m87",
+    "collectionField": "",
+    "collectionId": "pbc_1050919262",
+    "collectionName": "actionInputs",
+    "conditions": null,
+    "created": "2026-01-01 21:51:12.890Z",
+    "default": "",
+    "id": "shrh8zrsow8ki7v",
+    "name": "value",
+    "options": null,
+    "order": 1,
+    "pattern": "",
+    "placeholder": "123",
+    "required": false,
+    "slot": "",
+    "type": "literal",
+    "updated": "2026-01-01 21:58:58.987Z"
+}

@@ -38,7 +38,7 @@ The library automatically attaches to `window.cc` and auto-initializes with `win
             });
 
             // Handle login button click
-            cc.events.on('click', '#login-btn', async () => {
+            document.getElementById('login-btn').addEventListener('click', async () => {
                 try {
                     await cc.db.login('user@example.com', 'password123');
                 } catch (e) {
@@ -59,7 +59,7 @@ Connect consists of three modules:
 | Module      | Purpose                                                                        |
 | ----------- | ------------------------------------------------------------------------------ |
 | `cc.state`  | Key-value store with optional persistence and TTL                              |
-| `cc.events` | Unified event system for custom events, DOM events, and realtime subscriptions |
+| `cc.events` | Unified event system for custom events and realtime subscriptions |
 | `cc.db`     | PocketBase wrapper for auth, CRUD operations, and file handling                |
 
 All modules work together seamlessly. State changes emit events. Database operations emit events. Subscribing to database events automatically enables realtime updates.
@@ -119,12 +119,27 @@ if (cc.state.has('user')) {
 }
 ```
 
-#### `state.delete(key: string): void`
+#### `state.remove(key: string): void`
 
 Remove a key from state. Emits `state:{key}` event.
 
 ```javascript
-cc.state.delete('tempData');
+cc.state.remove('tempData');
+```
+
+#### `state.list(): Array<{ key: string; storage: 'memory' | 'session' | 'local' }>`
+
+List all state keys and their storage locations (useful for debugging).
+
+```javascript
+cc.state.set('user', { name: 'Pat' });
+cc.state.set('theme', 'dark', { persist: 'local' });
+
+console.log(cc.state.list());
+// [
+//   { key: 'user', storage: 'memory' },
+//   { key: 'theme', storage: 'local' }
+// ]
 ```
 
 #### `state.clear(): void`
@@ -139,11 +154,11 @@ cc.state.clear();
 
 ### cc.events
 
-Unified event system supporting custom events, DOM events with delegation, and automatic realtime subscriptions.
+Unified event system supporting custom events and automatic realtime subscriptions.
 
 #### `events.on(event: string, callback: EventCallback): void`
 
-Subscribe to a custom event.
+Subscribe to an event.
 
 ```javascript
 cc.events.on('auth:login', ({ user }) => {
@@ -155,50 +170,14 @@ cc.events.on('state:theme', ({ value, oldValue }) => {
 });
 ```
 
-#### `events.on(event: string, selector: string | Document, callback: DOMEventCallback): void`
-
-Subscribe to DOM events with delegation.
-
-```javascript
-// Click events on elements matching selector
-cc.events.on('click', '.delete-btn', (e) => {
-    const id = e.target.dataset.id;
-    cc.db.delete('items', id);
-});
-
-// Events on document
-cc.events.on('keydown', document, (e) => {
-    if (e.key === 'Escape') {
-        closeModal();
-    }
-});
-
-// Form submissions
-cc.events.on('submit', '#login-form', async (e) => {
-    e.preventDefault();
-    const form = new FormData(e.target);
-    await cc.db.login(form.get('email'), form.get('password'));
-});
-```
-
 #### `events.off(event: string, callback: EventCallback): void`
 
-Unsubscribe from a custom event.
+Unsubscribe from an event.
 
 ```javascript
 const handler = ({ user }) => console.log(user);
 cc.events.on('auth:login', handler);
 cc.events.off('auth:login', handler);
-```
-
-#### `events.off(event: string, selector: string | Document, callback: DOMEventCallback): void`
-
-Unsubscribe from a DOM event.
-
-```javascript
-const clickHandler = (e) => console.log('clicked');
-cc.events.on('click', '#btn', clickHandler);
-cc.events.off('click', '#btn', clickHandler);
 ```
 
 #### `events.once(event: string, callback: EventCallback): void`
@@ -208,16 +187,6 @@ Subscribe to an event once (auto-unsubscribes after first call).
 ```javascript
 cc.events.once('auth:login', ({ user }) => {
     showWelcomeModal(user);
-});
-```
-
-#### `events.once(event: string, selector: string | Document, callback: DOMEventCallback): void`
-
-Subscribe to a DOM event once.
-
-```javascript
-cc.events.once('click', '#accept-terms', () => {
-    cc.state.set('termsAccepted', true, { persist: 'local' });
 });
 ```
 
@@ -239,16 +208,15 @@ cc.events.clear('auth:login'); // Clear specific event
 cc.events.clear(); // Clear all events
 ```
 
-#### `events.list(): Array<{ type: string; event: string; selector?: string }>`
+#### `events.list(): Array<{ event: string }>`
 
 List all active listeners (useful for debugging).
 
 ```javascript
 console.log(cc.events.list());
 // [
-//   { type: 'custom', event: 'auth:login' },
-//   { type: 'dom', event: 'click', selector: '#btn' },
-//   { type: 'custom', event: 'db:posts:create' }
+//   { event: 'auth:login' },
+//   { event: 'db:posts:create' }
 // ]
 ```
 
@@ -459,18 +427,23 @@ const thumbUrl = cc.db.getFileUrl(record, record.image, { thumb: '100x100' });
 
 ### Database Events (Realtime)
 
-Subscribe to database events to automatically enable realtime updates. Format: `db:{collection}:{action}`
+Subscribe to database events to automatically enable realtime updates.
 
-| Event Pattern            | Payload                   | Description    |
-| ------------------------ | ------------------------- | -------------- |
-| `db:{collection}:create` | `{ record: RecordModel }` | Record created |
-| `db:{collection}:update` | `{ record: RecordModel }` | Record updated |
-| `db:{collection}:delete` | `{ id: string }`          | Record deleted |
+**Collection-wide format:** `db:{collection}:{action}`
+**Record-specific format:** `db:{collection}:{action}:{id}` (update/delete only)
+
+| Event Pattern                 | Payload                   | Description             |
+| ----------------------------- | ------------------------- | ----------------------- |
+| `db:{collection}:create`      | `{ record: RecordModel }` | Any record created      |
+| `db:{collection}:update`      | `{ record: RecordModel }` | Any record updated      |
+| `db:{collection}:delete`      | `{ id: string }`          | Any record deleted      |
+| `db:{collection}:update:{id}` | `{ record: RecordModel }` | Specific record updated |
+| `db:{collection}:delete:{id}` | `{ id: string }`          | Specific record deleted |
 
 **Examples:**
 
 ```javascript
-// Posts collection
+// Listen to all posts updates
 cc.events.on('db:posts:create', ({ record }) => {
     console.log('New post:', record.title);
 });
@@ -479,27 +452,22 @@ cc.events.on('db:posts:update', ({ record }) => {
     console.log('Post updated:', record.id);
 });
 
-cc.events.on('db:posts:delete', ({ id }) => {
-    console.log('Post deleted:', id);
+// Listen to a specific post only
+cc.events.on('db:posts:update:abc123', ({ record }) => {
+    console.log('Post abc123 was updated:', record.title);
 });
 
-// Comments collection
-cc.events.on('db:comments:create', ({ record }) => {
-    addCommentToUI(record);
-});
-
-// Users collection
-cc.events.on('db:users:update', ({ record }) => {
-    if (record.id === currentUserId) {
-        updateProfileUI(record);
-    }
+cc.events.on('db:posts:delete:abc123', ({ id }) => {
+    console.log('Post abc123 was deleted');
 });
 ```
 
 **Automatic Realtime Management:**
 
--   Subscribing to any `db:*` event automatically enables PocketBase realtime for that collection
--   Unsubscribing from the last listener for a collection automatically disables realtime
+-   Subscribing to any `db:*` event automatically enables PocketBase realtime
+-   Collection-wide events use `subscribe('*', ...)` for all records
+-   Record-specific events use `subscribe(recordId, ...)` for targeted updates
+-   Unsubscribing from the last listener automatically disables the subscription
 -   No manual subscription management required
 
 ### State Events
@@ -518,35 +486,6 @@ cc.events.on('state:theme', ({ value, oldValue }) => {
 cc.events.on('state:cart', ({ value }) => {
     updateCartBadge(value?.items?.length || 0);
 });
-```
-
-### DOM Events
-
-Any standard DOM event can be subscribed to with a CSS selector:
-
-```javascript
-// Mouse events
-cc.events.on('click', '.button', handler);
-cc.events.on('dblclick', '.item', handler);
-cc.events.on('mouseenter', '.tooltip-trigger', handler);
-cc.events.on('mouseleave', '.tooltip-trigger', handler);
-
-// Keyboard events
-cc.events.on('keydown', document, handler);
-cc.events.on('keyup', '#search-input', handler);
-cc.events.on('keypress', '.text-field', handler);
-
-// Form events
-cc.events.on('submit', 'form', handler);
-cc.events.on('change', 'select', handler);
-cc.events.on('input', 'input[type="text"]', handler);
-cc.events.on('focus', '.input-field', handler);
-cc.events.on('blur', '.input-field', handler);
-
-// Other events
-cc.events.on('scroll', document, handler);
-cc.events.on('resize', document, handler);
-cc.events.on('load', 'img', handler);
 ```
 
 ---
@@ -583,7 +522,7 @@ cc.events.on('load', 'img', handler);
     });
 
     // Login form
-    cc.events.on('submit', '#auth-form', async (e) => {
+    document.getElementById('auth-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const form = new FormData(e.target);
         try {
@@ -594,7 +533,7 @@ cc.events.on('load', 'img', handler);
     });
 
     // Sign up
-    cc.events.on('click', '#signup-btn', async () => {
+    document.getElementById('signup-btn').addEventListener('click', async () => {
         const email = document.querySelector('[name="email"]').value;
         const password = document.querySelector('[name="password"]').value;
         try {
@@ -606,7 +545,7 @@ cc.events.on('load', 'img', handler);
     });
 
     // Google OAuth
-    cc.events.on('click', '#google-btn', async () => {
+    document.getElementById('google-btn').addEventListener('click', async () => {
         try {
             await cc.db.loginWithOAuth('google');
         } catch (err) {
@@ -615,7 +554,7 @@ cc.events.on('load', 'img', handler);
     });
 
     // Logout
-    cc.events.on('click', '#logout-btn', () => {
+    document.getElementById('logout-btn').addEventListener('click', () => {
         cc.db.logout();
     });
 </script>
@@ -662,7 +601,7 @@ cc.events.on('load', 'img', handler);
     }
 
     // Send message
-    cc.events.on('submit', '#message-form', async (e) => {
+    document.getElementById('message-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const form = new FormData(e.target);
         await cc.db.create('messages', {
@@ -727,7 +666,7 @@ cc.events.on('load', 'img', handler);
     });
 
     // Add todo
-    cc.events.on('keypress', '#new-todo', async (e) => {
+    document.getElementById('new-todo').addEventListener('keypress', async (e) => {
         if (e.key !== 'Enter' || !e.target.value.trim()) return;
 
         const todo = await cc.db.create('todos', {
@@ -741,26 +680,26 @@ cc.events.on('load', 'img', handler);
         e.target.value = '';
     });
 
-    // Toggle completion
-    cc.events.on('change', '#todo-list input[type="checkbox"]', async (e) => {
-        const id = e.target.closest('li').dataset.id;
-        const completed = e.target.checked;
+    // Toggle completion and delete (event delegation)
+    document.getElementById('todo-list').addEventListener('click', async (e) => {
+        const li = e.target.closest('li');
+        if (!li) return;
+        const id = li.dataset.id;
 
-        await cc.db.update('todos', id, { completed });
+        if (e.target.matches('input[type="checkbox"]')) {
+            const completed = e.target.checked;
+            await cc.db.update('todos', id, { completed });
+            const todos = cc.state
+                .get('todos')
+                .map((t) => (t.id === id ? { ...t, completed } : t));
+            cc.state.set('todos', todos);
+        }
 
-        const todos = cc.state
-            .get('todos')
-            .map((t) => (t.id === id ? { ...t, completed } : t));
-        cc.state.set('todos', todos);
-    });
-
-    // Delete todo
-    cc.events.on('click', '.delete-btn', async (e) => {
-        const id = e.target.closest('li').dataset.id;
-        await cc.db.delete('todos', id);
-
-        const todos = cc.state.get('todos').filter((t) => t.id !== id);
-        cc.state.set('todos', todos);
+        if (e.target.matches('.delete-btn')) {
+            await cc.db.delete('todos', id);
+            const todos = cc.state.get('todos').filter((t) => t.id !== id);
+            cc.state.set('todos', todos);
+        }
     });
 
     // Sync with realtime updates from other devices
@@ -821,7 +760,7 @@ cc.events.on('load', 'img', handler);
     }
 
     // Upload image
-    cc.events.on('submit', '#upload-form', async (e) => {
+    document.getElementById('upload-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const form = new FormData(e.target);
         form.append('user', cc.db.getUser().id);
@@ -830,10 +769,12 @@ cc.events.on('load', 'img', handler);
         e.target.reset();
     });
 
-    // Delete image
-    cc.events.on('click', '.delete-btn', async (e) => {
-        const id = e.target.closest('.image-card').dataset.id;
-        await cc.db.delete('gallery', id);
+    // Delete image (event delegation)
+    document.getElementById('gallery').addEventListener('click', async (e) => {
+        if (e.target.matches('.delete-btn')) {
+            const id = e.target.closest('.image-card').dataset.id;
+            await cc.db.delete('gallery', id);
+        }
     });
 
     // Realtime updates
@@ -894,7 +835,6 @@ import {
     db,
     StateOptions,
     EventCallback,
-    DOMEventCallback,
     DbUser,
     ListOptions,
     ListResult,

@@ -1,0 +1,15 @@
+{
+    "active": true,
+    "category": "Events",
+    "collectionId": "pbc_2484833797",
+    "collectionName": "actions",
+    "created": "2026-01-02 12:00:00.000Z",
+    "icon": "📣",
+    "id": "emit001action0000",
+    "identifier": "emit",
+    "implementation": "cc.events.emit(${inputs.event}${inputs.payload ? `, ${inputs.payload}` : ''});",
+    "name": "Emit Event",
+    "resultVariable": null,
+    "target": "frontend",
+    "updated": "2026-01-02 12:00:00.000Z"
+}

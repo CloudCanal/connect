@@ -1,0 +1,130 @@
+{
+    "category": "Interaction",
+    "collectionId": "pbc_3421342936",
+    "collectionName": "hooks",
+    "context": null,
+    "created": "2025-12-30 04:08:20.101Z",
+    "excludeActions": [],
+    "id": "3m3vcjf2dl8xbmr",
+    "implementation": "const handler = async (event) => {\\n\\t${SLOT_actions}\\n};\\nelement.addEventListener('click', handler);\\nthis._eventCleanups.push(() => element.removeEventListener('click', handler));",
+    "inputs": null,
+    "name": "Click",
+    "outputs": [
+        {
+            "type": "static",
+            "typeName": "event",
+            "schema": [
+                {
+                    "name": "type",
+                    "type": "text"
+                },
+                {
+                    "name": "timeStamp",
+                    "type": "number"
+                },
+                {
+                    "name": "target",
+                    "type": "object",
+                    "schema": [
+                        {
+                            "name": "id",
+                            "type": "text"
+                        },
+                        {
+                            "name": "tagName",
+                            "type": "text"
+                        },
+                        {
+                            "name": "name",
+                            "type": "text"
+                        },
+                        {
+                            "name": "value",
+                            "type": "text"
+                        },
+                        {
+                            "name": "dataset",
+                            "type": "object"
+                        }
+                    ]
+                },
+                {
+                    "name": "currentTarget",
+                    "type": "object",
+                    "schema": [
+                        {
+                            "name": "id",
+                            "type": "text"
+                        },
+                        {
+                            "name": "tagName",
+                            "type": "text"
+                        },
+                        {
+                            "name": "name",
+                            "type": "text"
+                        },
+                        {
+                            "name": "value",
+                            "type": "text"
+                        },
+                        {
+                            "name": "dataset",
+                            "type": "object"
+                        }
+                    ]
+                },
+                {
+                    "name": "ctrlKey",
+                    "type": "boolean"
+                },
+                {
+                    "name": "shiftKey",
+                    "type": "boolean"
+                },
+                {
+                    "name": "altKey",
+                    "type": "boolean"
+                },
+                {
+                    "name": "metaKey",
+                    "type": "boolean"
+                },
+                {
+                    "name": "button",
+                    "type": "number"
+                },
+                {
+                    "name": "buttons",
+                    "type": "number"
+                },
+                {
+                    "name": "clientX",
+                    "type": "number"
+                },
+                {
+                    "name": "clientY",
+                    "type": "number"
+                },
+                {
+                    "name": "pageX",
+                    "type": "number"
+                },
+                {
+                    "name": "pageY",
+                    "type": "number"
+                },
+                {
+                    "name": "pointerType",
+                    "type": "text"
+                },
+                {
+                    "name": "defaultPrevented",
+                    "type": "boolean"
+                }
+            ]
+        }
+    ],
+    "target": "frontend",
+    "updated": "2025-12-31 16:18:10.268Z"
+}
